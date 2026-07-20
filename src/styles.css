@@ -99,8 +99,8 @@ input {
 
 .hero h1 {
   max-width: 13ch;
-  font-size: clamp(18px, 3vw, 30px);
-  line-height: 1.08;
+  font-size: clamp(14px, 2.1vw, 21px);
+  line-height: 1.04;
   text-wrap: balance;
 }
 

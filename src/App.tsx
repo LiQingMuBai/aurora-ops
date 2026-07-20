@@ -259,7 +259,11 @@ export function App() {
       <section className="hero">
         <div className="hero-copy">
           <p className="eyebrow">Solana / USDC / Delegate Flow</p>
-          <h1>把授权和代扣转账变成一个可点击的网页模拟器</h1>
+          <h1>
+            把授权和代扣转账变成
+            <br />
+            一个可点击的网页模拟器
+          </h1>
           <p className="hero-text">
             先让用户在 Phantom 中签名授权，再由后台 delegate 把 USDC 转到目标地址。
             这个页面会把网络状态、签名结果和接口响应全部摊开给你看。
