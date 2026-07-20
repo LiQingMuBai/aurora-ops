@@ -1,116 +1,119 @@
 # aurora-ops
 
-一个基于 TypeScript 的 Solana USDC 授权监听与代扣演示项目。
+English | [简体中文](./README.zh-CN.md)
 
-它实现了 Solana 上最接近以太坊 `approve + transferFrom` 的交互模式：
+A TypeScript-based demo for Solana USDC delegation monitoring and delegated transfers.
 
-1. 用户通过 `ApproveChecked` 把某个 USDC Token Account 授权给后台地址作为 `delegate`
-2. 后台通过 `TransferChecked` 使用这笔授权额度，把 USDC 转移到目标地址
-3. 后台还可以监听链上授权状态变化，自动识别被授权账户并执行后续处理
+The project reproduces the closest Solana equivalent of Ethereum's `approve + transferFrom` flow:
 
-当前选定的 GitHub 项目名称：
+1. A user signs an `ApproveChecked` instruction to authorize the backend as `delegate` for a USDC token account.
+2. The backend spends from that delegated allowance through `TransferChecked` and sends USDC to a destination wallet.
+3. The backend can also monitor delegation changes on-chain, discover approved accounts automatically, and process them later.
+
+Selected GitHub project name:
 
 - `aurora-ops`
 
-## 项目能力
+## Features
 
-- 支持构建 `ApproveChecked` 未签名交易，由 Phantom 等钱包签名发送
-- 支持后台以 `delegate` 身份发起 `TransferChecked`
-- 支持链上监听 `delegate == backend` 的 USDC Token Account
-- 支持按照 `min(balance, delegatedAmount)` 计算可转金额
-- 支持 MySQL 持久化授权状态与转账历史
-- 支持独立授权列表页查看已授权地址、余额、授权额度和可转额度
-- 支持从 `.env` 读取默认目标地址，前端列表页可直接按记录触发转账
-- 支持定时巡检任务，按授权阈值和余额阈值自动归集到目标地址
+- Builds unsigned `ApproveChecked` transactions for Phantom and other wallets to sign
+- Sends `TransferChecked` as the backend acting as `delegate`
+- Watches USDC token accounts where `delegate == backend`
+- Calculates transferable amount with `min(balance, delegatedAmount)`
+- Persists approval state and transfer history in MySQL
+- Provides a dedicated approvals page with owner, balance, allowance, and transferable amount
+- Reads the default destination wallet from `.env` and lets the frontend trigger transfers directly from list rows
+- Runs a scheduled sweep task based on delegated amount and balance thresholds
 
-## 技术栈
+## Tech Stack
 
-- 后端：Node.js、TypeScript、Express
-- 前端：React、Vite
-- 链上 SDK：`@solana/web3.js`、`@solana/spl-token`
-- 数据库：MySQL（可选）
+- Backend: Node.js, TypeScript, Express
+- Frontend: React, Vite
+- On-chain SDKs: `@solana/web3.js`, `@solana/spl-token`
+- Database: MySQL (optional)
 
-## 目录结构
+## Project Structure
 
 ```text
 .
 ├── src/
-│   ├── components/          # 前端页面组件
-│   ├── hooks/               # 前端钱包 hooks
-│   ├── utils/               # 前端工具函数和测试
-│   ├── App.tsx              # 前端主页面与路由切换
-│   ├── config.ts            # .env 配置集中解析
-│   ├── index.ts             # 后端 API、监听器、自动转账入口
-│   └── mysql.ts             # MySQL 持久化层
-├── .env.example             # 环境变量模板
-├── README.md                # 项目说明
-└── DEPLOYMENT.md            # 部署文档
+│   ├── components/          # Frontend page components
+│   ├── hooks/               # Frontend wallet hooks
+│   ├── utils/               # Frontend utilities and tests
+│   ├── App.tsx              # Main frontend page and route switching
+│   ├── config.ts            # Centralized .env parsing
+│   ├── index.ts             # Backend APIs, listeners, and auto-transfer entry
+│   └── mysql.ts             # MySQL persistence layer
+├── .env.example             # Environment template
+├── README.md                # English project guide
+├── README.zh-CN.md          # Chinese project guide
+└── DEPLOYMENT.md            # Deployment guide
 ```
 
-## 核心流程
+## Core Flow
 
-### 1. 用户授权
+### 1. User Approval
 
-用户钱包对某个 USDC Token Account 签署 `ApproveChecked`，把后台地址设置为 `delegate`。
+The wallet signs `ApproveChecked` for a USDC token account and sets the backend address as `delegate`.
 
-### 2. 后台识别授权
+### 2. Backend Detects Delegation
 
-后端通过 `getProgramAccounts` 和 `onProgramAccountChange` 只监听：
+The backend uses `getProgramAccounts` and `onProgramAccountChange` to monitor only:
 
 - `mint == USDC_MINT`
 - `delegate == BACKEND_PUBLIC_KEY`
 
-### 3. 后台计算可转金额
+### 3. Backend Computes Transferable Amount
 
-后端读取链上账户状态，并按以下规则确定可转额度：
+The backend reads the token account state and computes the spendable amount with:
 
 ```text
 transferableAmount = min(balance, delegatedAmount)
 ```
 
-### 4. 后台执行代扣
+### 4. Backend Executes Delegated Transfer
 
-当满足条件时，后台用自身私钥签名 `TransferChecked`，把 USDC 转到目标地址的 ATA。
+When conditions are met, the backend signs `TransferChecked` with its own key and sends USDC to the destination ATA.
 
-## 页面说明
+## Pages
 
-### 首页
+### Home Page
 
-首页主要用于模拟完整流程：
+The home page is used to simulate the full flow:
 
-- 连接 Phantom
-- 构建授权交易
-- 触发后台 delegate 转账
-- 查看最近一次授权与转账结果
+- Connect Phantom
+- Build an approval transaction
+- Trigger a backend delegated transfer
+- Inspect the latest approval and transfer result
 
-### 授权列表页
+### Approvals Page
 
-授权列表页用于查看大量已授权记录，地址建议：
+The approvals page is designed for viewing a large number of delegated records:
 
 ```text
 http://localhost:5173/#/approvals
 ```
 
-该页面支持：
+It supports:
 
-- 展示授权钱包地址
-- 展示 Source ATA
-- 展示授权金额
-- 展示当前 USDC 余额
-- 展示当前可转金额
-- 直接按记录触发后台转账
+- Showing the owner wallet
+- Showing the source ATA
+- Showing the delegated amount
+- Showing the current USDC balance
+- Showing the current transferable amount
+- Triggering backend transfer directly from each row
 
-目标地址不再由前端输入，而是统一来自 `.env` 中的 `DEFAULT_DESTINATION_OWNER`。
+The destination wallet is no longer entered in the frontend and instead always comes from `DEFAULT_DESTINATION_OWNER` in `.env`.
 
-## 环境变量
+## Environment Variables
 
-运行前请先复制模板：
+Copy the template before running:
 
 ```bash
 cp .env.example .env
 ```
 
-当前支持的主要环境变量：
+Main supported environment variables:
 
 ```env
 PORT=3000
@@ -131,19 +134,19 @@ MYSQL_CONNECTION_LIMIT=10
 MYSQL_WAIT_FOR_CONNECTIONS=true
 ```
 
-说明：
+Notes:
 
-- `BACKEND_SECRET_KEY`：后台私钥，支持 Base58 或 JSON 数组
-- `DEFAULT_DESTINATION_OWNER`：授权列表页点击转账时使用的默认目标钱包地址
-- `ENABLE_APPROVAL_LISTENER`：是否开启链上授权监听
-- `ENABLE_AUTO_TRANSFER`：是否监听到授权后自动执行转账
-- `ENABLE_SCHEDULED_SWEEP`：是否开启定时巡检归集任务
-- `SCHEDULED_SWEEP_INTERVAL_MS`：定时巡检周期，默认 `300000` 毫秒，即 5 分钟
-- `SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI`：授权额度必须大于该值才会触发归集
-- `SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI`：账户余额必须大于该值才会触发归集
-- `ENABLE_MYSQL_PERSISTENCE`：是否开启 MySQL 持久化
+- `BACKEND_SECRET_KEY`: backend private key, supports Base58 or JSON array
+- `DEFAULT_DESTINATION_OWNER`: default destination wallet used when a transfer is triggered from the approvals page
+- `ENABLE_APPROVAL_LISTENER`: enables on-chain approval monitoring
+- `ENABLE_AUTO_TRANSFER`: automatically transfers after detecting an approval
+- `ENABLE_SCHEDULED_SWEEP`: enables the scheduled sweep task
+- `SCHEDULED_SWEEP_INTERVAL_MS`: scheduled scan interval, default `300000` ms (5 minutes)
+- `SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI`: delegated amount must be greater than this value to trigger a sweep
+- `SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI`: balance must be greater than this value to trigger a sweep
+- `ENABLE_MYSQL_PERSISTENCE`: enables MySQL persistence
 
-如果你希望只保留“每 5 分钟按阈值归集”，建议使用下面的组合：
+If you only want threshold-based sweeping every 5 minutes, this configuration is recommended:
 
 ```env
 ENABLE_AUTO_TRANSFER=false
@@ -153,46 +156,46 @@ SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI=100
 SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI=100
 ```
 
-## 本地启动
+## Local Development
 
-安装依赖：
+Install dependencies:
 
 ```bash
 npm install
 ```
 
-启动前后端开发环境：
+Start frontend and backend together:
 
 ```bash
 npm run dev
 ```
 
-默认会启动：
+Default URLs:
 
-- 前端：`http://localhost:5173`
-- 后端：`http://localhost:3000`
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3000`
 
-如果端口被占用，Vite 可能会自动切换到其他端口。
+If a port is occupied, Vite may automatically switch to a different one.
 
-## API 说明
+## API Reference
 
 ### `GET /health`
 
-返回运行时状态，例如：
+Returns runtime status such as:
 
-- RPC 地址
-- USDC Mint
-- 后台 delegate 地址
-- 默认目标地址
-- 监听和自动转账开关
-- 定时归集任务开关和阈值
-- MySQL 是否启用
+- RPC endpoint
+- USDC mint
+- Backend delegate address
+- Default destination address
+- Listener and auto-transfer switches
+- Scheduled sweep switch and thresholds
+- MySQL enabled state
 
 ### `GET /approvals`
 
-返回当前链上已授权给后台 delegate 的 USDC 账户列表。
+Returns the current list of on-chain USDC token accounts delegated to the backend.
 
-每条记录包括：
+Each record includes:
 
 - `sourceTokenAccount`
 - `ownerWallet`
@@ -203,9 +206,9 @@ npm run dev
 
 ### `POST /approve/build`
 
-为前端生成一笔未签名的 `ApproveChecked` 交易。
+Builds an unsigned `ApproveChecked` transaction for the frontend.
 
-请求示例：
+Example request:
 
 ```bash
 curl -X POST http://localhost:3000/approve/build \
@@ -218,9 +221,9 @@ curl -X POST http://localhost:3000/approve/build \
 
 ### `POST /delegate/transfer`
 
-后台以 delegate 身份执行 USDC 转账。
+Executes a delegated USDC transfer from the backend.
 
-请求示例：
+Example request:
 
 ```bash
 curl -X POST http://localhost:3000/delegate/transfer \
@@ -231,19 +234,19 @@ curl -X POST http://localhost:3000/delegate/transfer \
   }'
 ```
 
-说明：
+Notes:
 
-- 当未传 `destinationOwner` 时，后端会自动使用 `.env` 里的 `DEFAULT_DESTINATION_OWNER`
-- 如目标 USDC ATA 不存在，后台会自动创建
+- If `destinationOwner` is omitted, the backend automatically uses `DEFAULT_DESTINATION_OWNER` from `.env`
+- If the destination USDC ATA does not exist, the backend creates it automatically
 
-## MySQL 持久化
+## MySQL Persistence
 
-启用 MySQL 后，后端会自动创建数据库和以下两张表：
+When MySQL is enabled, the backend automatically creates the database and these tables:
 
-- `approval_transfer_records`：每个 Source Token Account 的最新状态
-- `approval_transfer_history`：监听与转账的追加历史表
+- `approval_transfer_records`: latest state per source token account
+- `approval_transfer_history`: append-only history of monitoring and transfer events
 
-典型状态包括：
+Typical record states:
 
 - `approved`
 - `processing`
@@ -253,26 +256,26 @@ curl -X POST http://localhost:3000/delegate/transfer \
 - `failed`
 - `delegate_mismatch`
 
-## 开发命令
+## Development Commands
 
 ```bash
-npm run dev        # 同时启动前后端开发模式
-npm run dev:api    # 仅启动后端
-npm run dev:web    # 仅启动前端
-npm run build      # 构建前端
-npm run check      # 类型检查 + 单元测试
-npm run test       # 运行测试
+npm run dev        # Start frontend and backend in development mode
+npm run dev:api    # Start backend only
+npm run dev:web    # Start frontend only
+npm run build      # Build frontend
+npm run check      # Type check + unit tests
+npm run test       # Run tests
 ```
 
-## 安全提示
+## Security Notes
 
-- 不要提交真实的 `.env`
-- 不要提交生产私钥
-- `BACKEND_SECRET_KEY` 必须通过安全方式注入
-- 生产环境建议增加鉴权、请求签名、限流和审计日志
+- Never commit a real `.env`
+- Never commit production private keys
+- Inject `BACKEND_SECRET_KEY` through a secure channel
+- Add authentication, request signing, rate limiting, and audit logs before production use
 
-## 部署文档
+## Deployment Guide
 
-详见：
+See:
 
 - [DEPLOYMENT.md](./DEPLOYMENT.md)
