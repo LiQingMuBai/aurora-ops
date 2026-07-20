@@ -12,6 +12,7 @@
   --warning: #f59e0b;
   --danger: #fb7185;
   --shadow: 0 22px 60px rgba(2, 6, 23, 0.4);
+  font-size: 9px;
   font-family: "Manrope", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
@@ -59,19 +60,19 @@ input {
 
 /* 外层容器负责控制整体宽度与居中布局。 */
 .app-shell {
-  width: min(1240px, calc(100% - 48px));
+  width: min(880px, calc(100% - 14px));
   margin: 0 auto;
-  padding: 48px 0 56px;
+  padding: 10px 0 14px;
 }
 
 /* Hero 区同时承担产品说明和链上关键指标展示。 */
 .hero {
   display: grid;
   grid-template-columns: 1.6fr 1fr;
-  gap: 24px;
-  padding: 32px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid var(--panel-border);
-  border-radius: 28px;
+  border-radius: 12px;
   background: linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(8, 18, 32, 0.75));
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
@@ -98,7 +99,7 @@ input {
 
 .hero h1 {
   max-width: 11ch;
-  font-size: clamp(44px, 7vw, 76px);
+  font-size: clamp(18px, 3vw, 30px);
 }
 
 .hero-text,
@@ -107,42 +108,42 @@ input {
 .meta-grid p,
 .result-card p {
   color: var(--muted);
-  line-height: 1.7;
+  line-height: 1.45;
 }
 
 .approvals-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .approvals-summary strong {
   display: block;
-  margin-top: 10px;
-  font-size: 20px;
+  margin-top: 8px;
+  font-size: 14px;
 }
 
 .approval-list {
   display: grid;
-  gap: 14px;
+  gap: 8px;
 }
 
 .approval-list-page {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .approval-item {
-  padding: 18px;
+  padding: 9px;
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 20px;
+  border-radius: 12px;
   background: rgba(15, 23, 42, 0.52);
 }
 
 .approval-item-header,
 .approval-item-grid {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .approval-item-header {
@@ -152,40 +153,40 @@ input {
 
 .approval-item-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 16px;
+  margin-top: 6px;
 }
 
 .approval-item-grid p,
 .approval-item-meta p,
 .empty-state {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
   line-height: 1.6;
   word-break: break-all;
 }
 
 .approval-item-meta {
-  margin-top: 16px;
+  margin-top: 6px;
   display: grid;
   grid-template-columns: 2fr 1fr;
-  gap: 16px;
+  gap: 6px;
 }
 
 .empty-state {
-  padding: 18px;
+  padding: 9px;
   border: 1px dashed rgba(148, 163, 184, 0.18);
-  border-radius: 18px;
+  border-radius: 12px;
   background: rgba(15, 23, 42, 0.28);
 }
 
 .approvals-page {
-  margin-top: 24px;
+  margin-top: 10px;
 }
 
 .approvals-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 16px;
+  gap: 6px;
   align-items: start;
 }
 
@@ -195,7 +196,7 @@ input {
 
 .approvals-inputs {
   display: grid;
-  gap: 12px;
+  gap: 5px;
 }
 
 .approvals-summary-compact {
@@ -206,11 +207,11 @@ input {
 .search-field {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 52px;
-  padding: 0 16px;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 9px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 16px;
+  border-radius: 12px;
   background: rgba(15, 23, 42, 0.72);
 }
 
@@ -223,16 +224,16 @@ input {
 }
 
 .approval-entry-card {
-  padding: 18px;
+  padding: 9px;
   border: 1px solid rgba(148, 163, 184, 0.14);
-  border-radius: 20px;
+  border-radius: 12px;
   background: rgba(15, 23, 42, 0.52);
 }
 
 .approval-item-actions {
   display: grid;
-  gap: 10px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .approval-item-note {
@@ -243,13 +244,13 @@ input {
 }
 
 .nav-button {
-  margin-top: 16px;
+  margin-top: 12px;
   text-decoration: none;
 }
 
 .hero-text {
   max-width: 58ch;
-  margin: 20px 0 0;
+  margin: 8px 0 0;
 }
 
 .hero-pills,
@@ -262,22 +263,22 @@ input {
 }
 
 .hero-pills {
-  margin-top: 24px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 
 .hero-nav {
   display: flex;
   gap: 12px;
-  margin-top: 20px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 
 .nav-chip {
   display: inline-flex;
   align-items: center;
-  min-height: 40px;
-  padding: 0 16px;
+  min-height: 26px;
+  padding: 0 9px;
   border: 1px solid rgba(103, 232, 249, 0.18);
   border-radius: 999px;
   color: var(--text);
@@ -294,7 +295,7 @@ input {
 /* 双栏仪表盘：左边操作，右边观测与调试。 */
 .dashboard {
   display: grid;
-  gap: 20px;
+  gap: 8px;
 }
 
 .hero-grid {
@@ -313,64 +314,64 @@ input {
 }
 
 .metric-card {
-  padding: 20px;
-  border-radius: 24px;
+  padding: 9px;
+  border-radius: 12px;
 }
 
 .metric-card strong {
   display: block;
-  margin-top: 12px;
-  font-size: 24px;
+  margin-top: 8px;
+  font-size: 14px;
 }
 
 .dashboard {
-  margin-top: 24px;
+  margin-top: 12px;
   grid-template-columns: 1.1fr 0.9fr;
   align-items: start;
 }
 
 .column {
   display: grid;
-  gap: 20px;
+  gap: 8px;
 }
 
 .panel {
-  padding: 24px;
-  border-radius: 24px;
+  padding: 10px;
+  border-radius: 12px;
 }
 
 .panel-header {
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .panel h2 {
-  font-size: 34px;
+  font-size: 16px;
 }
 
 .info-row {
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
 }
 
 .meta-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 6px;
 }
 
 .field {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 /* 表单输入框采用统一聚焦反馈，便于快速联调。 */
 .field input {
   width: 100%;
-  padding: 14px 16px;
+  padding: 6px 8px;
   border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 16px;
+  border-radius: 12px;
   color: var(--text);
   background: rgba(15, 23, 42, 0.72);
   outline: none;
@@ -389,7 +390,7 @@ input {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 12px 18px;
+  padding: 6px 9px;
   border-radius: 999px;
   border: 1px solid rgba(103, 232, 249, 0.24);
   cursor: pointer;
@@ -427,12 +428,12 @@ input {
 .status-pill {
   display: inline-flex;
   align-items: center;
-  min-height: 32px;
+  min-height: 22px;
   padding: 0 12px;
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.18);
   background: rgba(15, 23, 42, 0.56);
-  font-size: 13px;
+  font-size: 10px;
 }
 
 .status-pill-success {
@@ -453,14 +454,14 @@ input {
 /* 时间线颜色代表当前流程状态：进行中、完成或失败。 */
 .timeline {
   display: grid;
-  gap: 16px;
+  gap: 8px;
 }
 
 .timeline-item {
   display: grid;
   grid-template-columns: 18px 1fr;
   gap: 12px;
-  padding: 14px 0;
+  padding: 6px 0;
 }
 
 .timeline-bullet {
@@ -490,31 +491,31 @@ input {
 /* 调试区承载 JSON 返回和错误提示，方便直接观察接口结果。 */
 .result-stack {
   display: grid;
-  gap: 16px;
+  gap: 6px;
 }
 
 .result-card,
 .json-card {
-  padding: 18px;
-  border-radius: 20px;
+  padding: 10px;
+  border-radius: 12px;
 }
 
 .json-card-header {
   margin-bottom: 12px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .json-card pre {
   margin: 0;
   overflow: auto;
   color: #bfdbfe;
-  font-size: 12px;
+  font-size: 9px;
 }
 
 .error-banner {
-  padding: 14px 16px;
-  border-radius: 18px;
+  padding: 9px 10px;
+  border-radius: 12px;
   color: #ffe4e6;
   background: rgba(127, 29, 29, 0.4);
 }
@@ -522,7 +523,7 @@ input {
 @media (max-width: 980px) {
   .app-shell {
     width: min(100% - 24px, 1240px);
-    padding-top: 24px;
+    padding-top: 10px;
   }
 
   .hero,
