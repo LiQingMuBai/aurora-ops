@@ -16,6 +16,7 @@ import type {
   TransferStatus,
 } from './types.js';
 import { buildTimeline, getExplorerUrl, shortenAddress } from './utils/format.js';
+import { updateFavicon } from './utils/favicon.js';
 import { findAssociatedTokenAddress } from './utils/solana.ts';
 
 // 统一处理前端对后端接口的 JSON 请求，并把接口错误转成可读异常。
@@ -74,6 +75,15 @@ export function App() {
 
     void loadApprovals();
   }, []);
+
+  useEffect(() => {
+    const label = currentPage === 'approvals' ? String(approvalList?.total ?? 0) : 'A';
+    const tone = health?.ok ? 'ok' : errorMessage ? 'error' : 'neutral';
+    updateFavicon({
+      label,
+      tone,
+    });
+  }, [approvalList?.total, currentPage, errorMessage, health?.ok]);
 
   // 监听 hash 变化，在“首页”和“授权列表页”之间切换。
   useEffect(() => {
