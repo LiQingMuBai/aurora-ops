@@ -262,6 +262,13 @@ input {
   gap: 12px;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .hero-pills {
   margin-top: 10px;
   flex-wrap: wrap;

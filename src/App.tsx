@@ -13,6 +13,7 @@ import type {
   BuildApproveResponse,
   DelegateTransferResponse,
   HealthResponse,
+  ScheduledSweepToggleResponse,
   TransferStatus,
 } from './types.js';
 import { buildTimeline, getExplorerUrl, shortenAddress } from './utils/format.js';
@@ -52,7 +53,17 @@ export function App() {
   const [transferResult, setTransferResult] = useState<DelegateTransferResponse | null>(null);
   const [approvalList, setApprovalList] = useState<ApprovalListResponse | null>(null);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
+  const [scheduledSweepUpdating, setScheduledSweepUpdating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadHealth = async () => {
+    try {
+      const payload = await fetchJson<HealthResponse>('/health');
+      setHealth(payload);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '健康检查失败');
+    }
+  };
 
   // 链上授权列表独立刷新，避免影响授权/转账主流程的错误提示。
   const loadApprovals = async () => {
@@ -69,10 +80,7 @@ export function App() {
 
   // 页面加载后先读取后端健康状态，用于展示 RPC、Mint 和后台 delegate 信息。
   useEffect(() => {
-    fetchJson<HealthResponse>('/health')
-      .then(setHealth)
-      .catch((error: Error) => setErrorMessage(error.message));
-
+    void loadHealth();
     void loadApprovals();
   }, []);
 
@@ -210,6 +218,41 @@ export function App() {
     }
   };
 
+  // 首页可直接启停定时归集任务，避免每次改 .env 再重启服务。
+  const handleToggleScheduledSweep = async () => {
+    if (!health) {
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+      setScheduledSweepUpdating(true);
+      const payload = await fetchJson<ScheduledSweepToggleResponse>('/scheduled-sweep/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          enabled: !health.scheduledSweepEnabled,
+        }),
+      });
+
+      setHealth((current) =>
+        current
+          ? {
+              ...current,
+              scheduledSweepEnabled: payload.scheduledSweepEnabled,
+              scheduledSweepIntervalMs: payload.scheduledSweepIntervalMs,
+              scheduledSweepMinDelegatedAmountUi: payload.scheduledSweepMinDelegatedAmountUi,
+              scheduledSweepMinBalanceAmountUi: payload.scheduledSweepMinBalanceAmountUi,
+            }
+          : current,
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '定时任务切换失败');
+    } finally {
+      setScheduledSweepUpdating(false);
+    }
+  };
+
   return (
     // 页面采用左操作右观测的双栏布局，强调“模拟操作 + 调试反馈”。
     <main className="app-shell">
@@ -271,11 +314,26 @@ export function App() {
               title="钱包与网络"
               eyebrow="Step 01"
               actions={
-                walletAddress ? (
-                  <button className="ghost-button" onClick={disconnect} type="button">
-                    断开
+                <div className="panel-actions">
+                  <button
+                    className={health?.scheduledSweepEnabled ? 'primary-button' : 'ghost-button'}
+                    onClick={handleToggleScheduledSweep}
+                    type="button"
+                    disabled={!health || scheduledSweepUpdating}
+                  >
+                    <Activity size={16} />
+                    {scheduledSweepUpdating
+                      ? '切换中'
+                      : health?.scheduledSweepEnabled
+                        ? '关闭定时任务'
+                        : '开启定时任务'}
                   </button>
-                ) : null
+                  {walletAddress ? (
+                    <button className="ghost-button" onClick={disconnect} type="button">
+                      断开
+                    </button>
+                  ) : null}
+                </div>
               }
             >
               <div className="info-row">
@@ -296,6 +354,24 @@ export function App() {
                 <div>
                   <span className="label">当前 ATA</span>
                   <p>{sourceTokenAccount || '连接钱包后自动计算'}</p>
+                </div>
+                <div>
+                  <span className="label">定时归集</span>
+                  <p>
+                    {health
+                      ? `${health.scheduledSweepEnabled ? '已开启' : '已关闭'} / ${Math.floor(
+                          health.scheduledSweepIntervalMs / 60000,
+                        )} 分钟`
+                      : '加载中'}
+                  </p>
+                </div>
+                <div>
+                  <span className="label">归集阈值</span>
+                  <p>
+                    {health
+                      ? `授权>${health.scheduledSweepMinDelegatedAmountUi} / 余额>${health.scheduledSweepMinBalanceAmountUi}`
+                      : '加载中'}
+                  </p>
                 </div>
               </div>
             </Panel>

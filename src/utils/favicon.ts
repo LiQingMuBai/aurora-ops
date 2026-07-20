@@ -47,6 +47,38 @@ function resolveToneDot(tone: FaviconTone): string {
   return '#38bdf8';
 }
 
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const roundRectCandidate = ctx as CanvasRenderingContext2D & {
+    roundRect?: (
+      x: number,
+      y: number,
+      width: number,
+      height: number,
+      radii?: number | number[],
+    ) => void;
+  };
+
+  ctx.beginPath();
+  if (typeof roundRectCandidate.roundRect === 'function') {
+    roundRectCandidate.roundRect(x, y, width, height, radius);
+    return;
+  }
+
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y, x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+}
+
 function renderFaviconPng({ label, tone }: FaviconPayload): string {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
@@ -71,22 +103,7 @@ function renderFaviconPng({ label, tone }: FaviconPayload): string {
   ctx.fillStyle = 'rgba(148, 163, 184, 0.26)';
   ctx.strokeStyle = 'rgba(147, 197, 253, 0.22)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  if ('roundRect' in ctx) {
-    (ctx as CanvasRenderingContext2D & { roundRect: typeof ctx.roundRect }).roundRect(5, 5, 54, 54, 14);
-  } else {
-    const x = 5;
-    const y = 5;
-    const width = 54;
-    const height = 54;
-    const radius = 14;
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + width, y, x + width, y + height, radius);
-    ctx.arcTo(x + width, y + height, x, y + height, radius);
-    ctx.arcTo(x, y + height, x, y, radius);
-    ctx.arcTo(x, y, x + width, y, radius);
-    ctx.closePath();
-  }
+  drawRoundedRect(ctx, 5, 5, 54, 54, 14);
   ctx.fill();
   ctx.stroke();
 

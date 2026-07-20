@@ -6,6 +6,23 @@ export type HealthResponse = {
   backendDelegate: string;
   defaultDestinationOwner: string;
   defaultDestinationTokenAccount: string;
+  // 当前运行时定时归集任务是否已开启。
+  scheduledSweepEnabled: boolean;
+  // 定时归集巡检周期，单位毫秒。
+  scheduledSweepIntervalMs: number;
+  // 定时归集要求的最小授权额度阈值，单位是 UI 金额字符串。
+  scheduledSweepMinDelegatedAmountUi: string;
+  // 定时归集要求的最小余额阈值，单位是 UI 金额字符串。
+  scheduledSweepMinBalanceAmountUi: string;
+};
+
+// 前端点击定时任务开关后，后端返回的运行时状态结构。
+export type ScheduledSweepToggleResponse = {
+  ok: boolean;
+  scheduledSweepEnabled: boolean;
+  scheduledSweepIntervalMs: number;
+  scheduledSweepMinDelegatedAmountUi: string;
+  scheduledSweepMinBalanceAmountUi: string;
 };
 
 // 当前链上已授权给后台 delegate 的 USDC 账户列表项。

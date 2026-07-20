@@ -129,18 +129,23 @@ export async function initMysqlPersistence(): Promise<void> {
   `);
 }
 
-// 读取上一次处理指纹，用来避免同一授权状态被重复消费。
-export async function getPersistedFingerprint(
+// 读取上一次处理指纹和状态，用来判断同一授权状态是否已经真正处理完成。
+export async function getPersistedRecordState(
   sourceTokenAccount: string,
-): Promise<string | null> {
+): Promise<{ fingerprint: string | null; status: string | null }> {
   const config = getMysqlPersistenceConfig();
   if (!config.enabled || !mysqlPool) {
-    return null;
+    return {
+      fingerprint: null,
+      status: null,
+    };
   }
 
-  const [rows] = await mysqlPool.query<(RowDataPacket & { last_fingerprint: string | null })[]>(
+  const [rows] = await mysqlPool.query<
+    (RowDataPacket & { last_fingerprint: string | null; last_status: string | null })[]
+  >(
     `
-      SELECT last_fingerprint
+      SELECT last_fingerprint, last_status
       FROM approval_transfer_records
       WHERE source_token_account = ?
       LIMIT 1
@@ -148,7 +153,10 @@ export async function getPersistedFingerprint(
     [sourceTokenAccount],
   );
 
-  return rows[0]?.last_fingerprint ?? null;
+  return {
+    fingerprint: rows[0]?.last_fingerprint ?? null,
+    status: rows[0]?.last_status ?? null,
+  };
 }
 
 // 每次监听到授权、开始处理、跳过、失败或转账成功，都把最新状态写入当前表并追加历史表。

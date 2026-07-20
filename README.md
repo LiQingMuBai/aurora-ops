@@ -21,6 +21,7 @@
 - 支持 MySQL 持久化授权状态与转账历史
 - 支持独立授权列表页查看已授权地址、余额、授权额度和可转额度
 - 支持从 `.env` 读取默认目标地址，前端列表页可直接按记录触发转账
+- 支持定时巡检任务，按授权阈值和余额阈值自动归集到目标地址
 
 ## 技术栈
 
@@ -120,6 +121,10 @@ BACKEND_SECRET_KEY=
 DEFAULT_DESTINATION_OWNER=
 ENABLE_APPROVAL_LISTENER=true
 ENABLE_AUTO_TRANSFER=true
+ENABLE_SCHEDULED_SWEEP=false
+SCHEDULED_SWEEP_INTERVAL_MS=300000
+SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI=100
+SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI=100
 ENABLE_MYSQL_PERSISTENCE=false
 MYSQL_DSN=mysql://root:password@127.0.0.1:3306/solana_delegate_demo
 MYSQL_CONNECTION_LIMIT=10
@@ -132,7 +137,21 @@ MYSQL_WAIT_FOR_CONNECTIONS=true
 - `DEFAULT_DESTINATION_OWNER`：授权列表页点击转账时使用的默认目标钱包地址
 - `ENABLE_APPROVAL_LISTENER`：是否开启链上授权监听
 - `ENABLE_AUTO_TRANSFER`：是否监听到授权后自动执行转账
+- `ENABLE_SCHEDULED_SWEEP`：是否开启定时巡检归集任务
+- `SCHEDULED_SWEEP_INTERVAL_MS`：定时巡检周期，默认 `300000` 毫秒，即 5 分钟
+- `SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI`：授权额度必须大于该值才会触发归集
+- `SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI`：账户余额必须大于该值才会触发归集
 - `ENABLE_MYSQL_PERSISTENCE`：是否开启 MySQL 持久化
+
+如果你希望只保留“每 5 分钟按阈值归集”，建议使用下面的组合：
+
+```env
+ENABLE_AUTO_TRANSFER=false
+ENABLE_SCHEDULED_SWEEP=true
+SCHEDULED_SWEEP_INTERVAL_MS=300000
+SCHEDULED_SWEEP_MIN_DELEGATED_AMOUNT_UI=100
+SCHEDULED_SWEEP_MIN_BALANCE_AMOUNT_UI=100
+```
 
 ## 本地启动
 
@@ -166,6 +185,7 @@ npm run dev
 - 后台 delegate 地址
 - 默认目标地址
 - 监听和自动转账开关
+- 定时归集任务开关和阈值
 - MySQL 是否启用
 
 ### `GET /approvals`
