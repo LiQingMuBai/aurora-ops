@@ -115,7 +115,7 @@ export function ApprovalListPage({
         {filteredItems.length ? (
           <div className="approval-list approval-list-page">
             {filteredItems.map((item) => {
-              const canTransfer = item.transferableAmountRaw !== '0';
+              const canTransfer = item.transferableAmountRaw !== '0' && item.recordSource !== 'mysql';
               return (
                 <article className="approval-item" key={item.sourceTokenAccount}>
                   <div className="approval-item-header">
@@ -124,8 +124,10 @@ export function ApprovalListPage({
                       <strong>{item.ownerWallet}</strong>
                     </div>
                     <StatusPill
-                      label={canTransfer ? '可代扣' : '额度为 0'}
-                      tone={canTransfer ? 'success' : 'warning'}
+                      label={
+                        item.recordSource === 'mysql' ? '历史记录' : canTransfer ? '可代扣' : '额度为 0'
+                      }
+                      tone={item.recordSource === 'mysql' ? 'warning' : canTransfer ? 'success' : 'warning'}
                     />
                   </div>
 
@@ -158,7 +160,10 @@ export function ApprovalListPage({
                   <div className="approval-item-actions">
                     <button
                       className="primary-button"
-                      disabled={submittingSourceTokenAccount === item.sourceTokenAccount}
+                      disabled={
+                        submittingSourceTokenAccount === item.sourceTokenAccount ||
+                        item.recordSource === 'mysql'
+                      }
                       onClick={() =>
                         void handleTransferApprovedAmount(
                           item.ownerWallet,
@@ -169,12 +174,16 @@ export function ApprovalListPage({
                       type="button"
                     >
                       <ArrowRightLeft size={16} />
-                      {submittingSourceTokenAccount === item.sourceTokenAccount
+                      {item.recordSource === 'mysql'
+                        ? '历史记录不可直转'
+                        : submittingSourceTokenAccount === item.sourceTokenAccount
                         ? '提交中'
                         : '转移授权金额'}
                     </button>
                     <p className="approval-item-note">
-                      将按该记录的授权金额发起转账；目标地址来自 `.env`；当前项目实际转的是 USDC。
+                      {item.recordSource === 'mysql'
+                        ? item.recordNote || '该记录来自 MySQL 持久化回显，仅用于展示历史授权；当前是否仍有效需要重新上链确认。'
+                        : '将按该记录的授权金额发起转账；目标地址来自 `.env`；当前项目实际转的是 USDC。'}
                     </p>
                     {rowMessageBySource[item.sourceTokenAccount] ? (
                       <p className="approval-item-note">{rowMessageBySource[item.sourceTokenAccount]}</p>

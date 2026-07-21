@@ -22,8 +22,10 @@ import {
   getMysqlPersistenceConfig,
   getPersistedRecordState,
   initMysqlPersistence,
+  listPersistedApprovalRecords,
   persistApprovalTransferRecord,
 } from './mysql.js';
+import type { ApprovalListItem } from './types.js';
 
 // 初始化 Express 服务，并启用 JSON 请求体解析。
 const app = express();
@@ -34,6 +36,11 @@ type ApproveBody = {
   owner: string;
   amountUi: string;
   ownerTokenAccount?: string;
+};
+
+// 前端把用户已签名的授权交易提交给后端，由后端负责广播到 RPC。
+type SubmitApproveBody = {
+  signedTransactionBase64: string;
 };
 
 // 前端请求“后台代扣转账”时提交的参数。
@@ -199,7 +206,7 @@ async function listApprovedUsdcAccounts() {
     filters: buildApprovalListenerFilters(),
   });
 
-  const items = await Promise.all(
+  const items: ApprovalListItem[] = await Promise.all(
     accounts.map(async (account) => {
       const sourceAccount = await getAccount(connection, account.pubkey);
       const transferableAmount = resolveTransferableAmount(
@@ -217,9 +224,36 @@ async function listApprovedUsdcAccounts() {
         delegatedAmountUi: formatUiAmount(sourceAccount.delegatedAmount, decimals),
         transferableAmountRaw: transferableAmount.toString(),
         transferableAmountUi: formatUiAmount(transferableAmount, decimals),
+        recordSource: 'chain' as const,
+        recordNote: '',
       };
     }),
   );
+
+  const existingSourceTokenAccounts = new Set(items.map((item) => item.sourceTokenAccount));
+  const persistedRecords = await listPersistedApprovalRecords(
+    backendKeypair.publicKey.toBase58(),
+    usdcMint.toBase58(),
+  );
+  for (const persistedRecord of persistedRecords) {
+    if (existingSourceTokenAccounts.has(persistedRecord.sourceTokenAccount)) {
+      continue;
+    }
+
+    items.push({
+      sourceTokenAccount: persistedRecord.sourceTokenAccount,
+      ownerWallet: persistedRecord.ownerWallet,
+      delegateWallet: backendKeypair.publicKey.toBase58(),
+      balanceRaw: persistedRecord.tokenBalanceRaw,
+      balanceUi: formatUiAmount(BigInt(persistedRecord.tokenBalanceRaw), decimals),
+      delegatedAmountRaw: persistedRecord.delegatedAmountRaw,
+      delegatedAmountUi: formatUiAmount(BigInt(persistedRecord.delegatedAmountRaw), decimals),
+      transferableAmountRaw: persistedRecord.transferableAmountRaw,
+      transferableAmountUi: formatUiAmount(BigInt(persistedRecord.transferableAmountRaw), decimals),
+      recordSource: 'mysql',
+      recordNote: `来自 MySQL 持久化记录，最近状态：${persistedRecord.status}；实际是否仍可代扣以后端链上校验为准。`,
+    });
+  }
 
   items.sort((left, right) => {
     const diff = BigInt(right.transferableAmountRaw) - BigInt(left.transferableAmountRaw);
@@ -748,6 +782,36 @@ app.post('/approve/build', async (req: Request<unknown, unknown, ApproveBody>, r
     });
   }
 });
+
+// 用户在钱包完成签名后，把完整交易交给后端广播，避免浏览器直连公共 RPC 被 403 拒绝。
+app.post(
+  '/approve/submit',
+  async (req: Request<unknown, unknown, SubmitApproveBody>, res: Response) => {
+    try {
+      const { signedTransactionBase64 } = req.body;
+      if (!signedTransactionBase64) {
+        throw new Error('signedTransactionBase64 is required');
+      }
+
+      const serializedTransaction = Buffer.from(signedTransactionBase64, 'base64');
+      const transaction = Transaction.from(serializedTransaction);
+      const signature = await connection.sendRawTransaction(serializedTransaction, {
+        preflightCommitment: solanaCommitment,
+      });
+
+      await connection.confirmTransaction(signature, solanaCommitment);
+
+      res.json({
+        signature,
+        recentBlockhash: transaction.recentBlockhash || null,
+      });
+    } catch (error) {
+      res.status(400).json({
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  },
+);
 
 // 后台作为 delegate 发起真正的 USDC 转账，前提是用户已先完成授权。
 app.post(

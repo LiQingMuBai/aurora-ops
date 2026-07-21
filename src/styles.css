@@ -50,7 +50,8 @@ a {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -376,7 +377,8 @@ input {
 }
 
 /* 表单输入框采用统一聚焦反馈，便于快速联调。 */
-.field input {
+.field input,
+.field select {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid rgba(148, 163, 184, 0.22);
@@ -387,7 +389,8 @@ input {
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
-.field input:focus {
+.field input:focus,
+.field select:focus {
   border-color: rgba(103, 232, 249, 0.7);
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.15);
 }

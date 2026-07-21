@@ -36,6 +36,8 @@ export type ApprovalListItem = {
   delegatedAmountUi: string;
   transferableAmountRaw: string;
   transferableAmountUi: string;
+  recordSource?: 'chain' | 'mysql';
+  recordNote?: string;
 };
 
 // 授权列表接口返回的数据结构。
@@ -57,6 +59,11 @@ export type BuildApproveResponse = {
   decimals: number;
   serializedTransactionBase64: string;
   note: string;
+};
+
+// “提交已签名授权交易”接口返回给前端的广播结果。
+export type SubmitApproveResponse = {
+  signature: string;
 };
 
 // “后台 delegate 转账”接口返回给前端的结果结构。

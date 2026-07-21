@@ -33,6 +33,18 @@ export type ApprovalPersistencePayload = {
   errorMessage?: string | null;
 };
 
+export type PersistedApprovalRecord = {
+  sourceTokenAccount: string;
+  ownerWallet: string;
+  delegateWallet: string;
+  destinationTokenAccount: string;
+  mint: string;
+  tokenBalanceRaw: string;
+  delegatedAmountRaw: string;
+  transferableAmountRaw: string;
+  status: string;
+};
+
 let mysqlPool: Pool | null = null;
 
 // MySQL 配置统一来自 .env，避免在业务代码里散落默认值。
@@ -256,4 +268,60 @@ export async function persistApprovalTransferRecord(
       payload.errorMessage || null,
     ],
   );
+}
+
+// 从 MySQL 当前表读取最近一次已记录的授权状态，补充给授权列表页做持久化回显。
+export async function listPersistedApprovalRecords(
+  delegateWallet: string,
+  mint: string,
+): Promise<PersistedApprovalRecord[]> {
+  const config = getMysqlPersistenceConfig();
+  if (!config.enabled || !mysqlPool) {
+    return [];
+  }
+
+  const [rows] = await mysqlPool.query<
+    (RowDataPacket & {
+      source_token_account: string;
+      owner_wallet: string;
+      delegate_wallet: string;
+      destination_token_account: string;
+      mint: string;
+      token_balance_raw: string;
+      delegated_amount_raw: string;
+      transferable_amount_raw: string;
+      last_status: string;
+    })[]
+  >(
+    `
+      SELECT
+        source_token_account,
+        owner_wallet,
+        delegate_wallet,
+        destination_token_account,
+        mint,
+        token_balance_raw,
+        delegated_amount_raw,
+        transferable_amount_raw,
+        last_status
+      FROM approval_transfer_records
+      WHERE delegate_wallet = ?
+        AND mint = ?
+        AND last_status IN ('approved', 'processing', 'skipped', 'transferred')
+      ORDER BY updated_at DESC
+    `,
+    [delegateWallet, mint],
+  );
+
+  return rows.map((row) => ({
+    sourceTokenAccount: row.source_token_account,
+    ownerWallet: row.owner_wallet,
+    delegateWallet: row.delegate_wallet,
+    destinationTokenAccount: row.destination_token_account,
+    mint: row.mint,
+    tokenBalanceRaw: row.token_balance_raw,
+    delegatedAmountRaw: row.delegated_amount_raw,
+    transferableAmountRaw: row.transferable_amount_raw,
+    status: row.last_status,
+  }));
 }

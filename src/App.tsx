@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { PublicKey, Transaction } from '@solana/web3.js';
 import { Activity, ArrowRightLeft, ChevronRight, ShieldCheck, Wallet } from 'lucide-react';
 import { ApprovalListPage } from './components/ApprovalListPage.js';
 import { Panel } from './components/Panel.js';
@@ -14,6 +14,7 @@ import type {
   DelegateTransferResponse,
   HealthResponse,
   ScheduledSweepToggleResponse,
+  SubmitApproveResponse,
   TransferStatus,
 } from './types.js';
 import { buildTimeline, getExplorerUrl, shortenAddress } from './utils/format.js';
@@ -45,13 +46,13 @@ export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [approveAmount, setApproveAmount] = useState('1.25');
   const [transferAmount, setTransferAmount] = useState('1.25');
-  const [destinationOwner, setDestinationOwner] = useState('');
   const [approveStatus, setApproveStatus] = useState<ApproveStatus>('idle');
   const [transferStatus, setTransferStatus] = useState<TransferStatus>('idle');
   const [approveResult, setApproveResult] = useState<BuildApproveResponse | null>(null);
   const [approveSignature, setApproveSignature] = useState<string | null>(null);
   const [transferResult, setTransferResult] = useState<DelegateTransferResponse | null>(null);
   const [approvalList, setApprovalList] = useState<ApprovalListResponse | null>(null);
+  const [selectedSourceTokenAccount, setSelectedSourceTokenAccount] = useState('');
   const [approvalsLoading, setApprovalsLoading] = useState(false);
   const [scheduledSweepUpdating, setScheduledSweepUpdating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -112,6 +113,37 @@ export function App() {
     ).toBase58();
   }, [health?.usdcMint, walletAddress]);
 
+  // 首页 Step 03 只允许从“已授权账户列表”中挑选来源账户，避免误把当前连接钱包 ATA 当成代扣来源。
+  const selectedApprovalItem = useMemo(
+    () =>
+      approvalList?.items.find((item) => item.sourceTokenAccount === selectedSourceTokenAccount) || null,
+    [approvalList?.items, selectedSourceTokenAccount],
+  );
+
+  const selectableApprovalItems = useMemo(
+    () => approvalList?.items.filter((item) => item.recordSource !== 'mysql') || [],
+    [approvalList?.items],
+  );
+
+  // 当前若连接的是后台 delegate 自己的钱包，则直接视为误操作场景并禁用首页代扣按钮。
+  const backendWalletConnected = Boolean(
+    walletAddress && health?.backendDelegate && walletAddress === health.backendDelegate,
+  );
+
+  useEffect(() => {
+    if (!selectableApprovalItems.length) {
+      setSelectedSourceTokenAccount('');
+      return;
+    }
+
+    const currentStillExists = selectableApprovalItems.some(
+      (item) => item.sourceTokenAccount === selectedSourceTokenAccount,
+    );
+    if (!currentStillExists) {
+      setSelectedSourceTokenAccount(selectableApprovalItems[0].sourceTokenAccount);
+    }
+  }, [selectableApprovalItems, selectedSourceTokenAccount]);
+
   // 把授权状态和转账状态映射成时间线，便于用户理解当前执行到哪一步。
   const timeline = useMemo(
     () =>
@@ -159,28 +191,22 @@ export function App() {
       setApproveStatus('signing');
 
       // 后端返回的是 base64 交易，前端还原后交给钱包签名。
-      const connection = new Connection(health.rpcUrl, 'confirmed');
       const transaction = Transaction.from(
         Uint8Array.from(atob(payload.serializedTransactionBase64), (char) => char.charCodeAt(0)),
       );
       const signedTransaction = await provider.signTransaction(transaction);
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+      const submitPayload = await fetchJson<SubmitApproveResponse>('/approve/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signedTransactionBase64: btoa(
+            String.fromCharCode(...signedTransaction.serialize()),
+          ),
+        }),
+      });
 
       setApproveStatus('confirming');
-      const blockhash = signedTransaction.recentBlockhash;
-      if (!blockhash) {
-        throw new Error('授权交易缺少 recent blockhash');
-      }
-      const { lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
-      await connection.confirmTransaction(
-        {
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        },
-        'confirmed',
-      );
-      setApproveSignature(signature);
+      setApproveSignature(submitPayload.signature);
       setApproveStatus('success');
       void loadApprovals();
     } catch (error) {
@@ -191,8 +217,13 @@ export function App() {
 
   // 第二步：在用户授权完成后，直接调用后端接口执行 delegate 转账。
   const handleTransfer = async () => {
-    if (!walletAddress) {
-      setErrorMessage('请先连接钱包');
+    if (backendWalletConnected) {
+      setErrorMessage('当前连接的是后台 delegate 地址，首页已禁止直接执行代扣转账');
+      return;
+    }
+
+    if (!selectedApprovalItem) {
+      setErrorMessage('请先从已授权账户中选择一个来源账户');
       return;
     }
 
@@ -203,8 +234,8 @@ export function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          owner: walletAddress,
-          destinationOwner,
+          owner: selectedApprovalItem.ownerWallet,
+          ownerTokenAccount: selectedApprovalItem.sourceTokenAccount,
           amountUi: transferAmount,
         }),
       });
@@ -253,6 +284,16 @@ export function App() {
     }
   };
 
+  const transferBlockedMessage = backendWalletConnected
+    ? '当前连接的是后台 delegate 地址。为避免把后台自己的 ATA 误当作代扣来源，首页已禁用该按钮。'
+    : !selectableApprovalItems.length
+      ? '当前没有可直接代扣的实时链上授权账户；MySQL 持久化记录仅用于展示历史，不可直接转账。'
+      : !selectedApprovalItem
+        ? '请先从已授权账户中选择一个来源账户。'
+        : selectedApprovalItem.transferableAmountRaw === '0'
+          ? '所选来源账户当前可转金额为 0，暂时不能执行代扣。'
+          : null;
+
   return (
     // 页面采用左操作右观测的双栏布局，强调“模拟操作 + 调试反馈”。
     <main className="app-shell">
@@ -298,7 +339,7 @@ export function App() {
             <strong>{shortenAddress(health?.backendDelegate)}</strong>
           </div>
           <div className="metric-card">
-            <span>Source ATA</span>
+            <span>当前钱包 ATA</span>
             <strong>{shortenAddress(sourceTokenAccount)}</strong>
           </div>
         </div>
@@ -356,7 +397,7 @@ export function App() {
                   <p>{health?.rpcUrl || '加载中'}</p>
                 </div>
                 <div>
-                  <span className="label">当前 ATA</span>
+                  <span className="label">当前钱包 ATA</span>
                   <p>{sourceTokenAccount || '连接钱包后自动计算'}</p>
                 </div>
                 <div>
@@ -395,23 +436,55 @@ export function App() {
 
             {/* 转账区复用授权结果，让后台执行真正的代扣动作。 */}
             <Panel title="后台代扣转账" eyebrow="Step 03">
+              {transferBlockedMessage ? <div className="error-banner">{transferBlockedMessage}</div> : null}
               <label className="field">
-                <span>目标钱包地址</span>
-                <input
-                  placeholder="输入接收方钱包地址"
-                  value={destinationOwner}
-                  onChange={(event) => setDestinationOwner(event.target.value)}
-                />
+                <span>来源账户（仅限已授权账户）</span>
+                <select
+                  value={selectedSourceTokenAccount}
+                  onChange={(event) => setSelectedSourceTokenAccount(event.target.value)}
+                  disabled={!selectableApprovalItems.length}
+                >
+                  {!selectableApprovalItems.length ? (
+                    <option value="">当前没有可直接代扣的实时链上授权账户</option>
+                  ) : null}
+                  {selectableApprovalItems.map((item) => (
+                    <option key={item.sourceTokenAccount} value={item.sourceTokenAccount}>
+                      {`${shortenAddress(item.ownerWallet)} / 可转 ${item.transferableAmountUi} USDC`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>已选来源 ATA</span>
+                <input readOnly value={selectedApprovalItem?.sourceTokenAccount || '请先选择已授权来源账户'} />
+              </label>
+              <label className="field">
+                <span>目标钱包地址（来自 .env）</span>
+                <input readOnly value={health?.defaultDestinationOwner || '加载中'} />
               </label>
               <label className="field">
                 <span>转账 USDC 金额</span>
                 <input value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} />
               </label>
-              <button className="primary-button wide-button" onClick={handleTransfer} type="button">
+              <button
+                className="primary-button wide-button"
+                onClick={handleTransfer}
+                type="button"
+                disabled={Boolean(transferBlockedMessage) || transferStatus === 'submitting'}
+              >
                 <ArrowRightLeft size={16} />
-                执行 Delegate 转账
+                {transferStatus === 'submitting' ? '提交中' : '执行 Delegate 转账'}
               </button>
-              <p className="hint">后台会校验当前 delegate 和剩余额度，不满足条件会直接报错。</p>
+              <p className="hint">
+                首页不会再默认使用当前连接钱包的 ATA。这里只能从已授权账户中挑选来源账户，目标地址固定来自
+                `.env` 的 `DEFAULT_DESTINATION_OWNER`。
+              </p>
+              {selectedApprovalItem ? (
+                <p className="hint">
+                  已选账户：授权 {selectedApprovalItem.delegatedAmountUi} USDC / 余额{' '}
+                  {selectedApprovalItem.balanceUi} USDC / 可转 {selectedApprovalItem.transferableAmountUi} USDC
+                </p>
+              ) : null}
             </Panel>
           </div>
 
