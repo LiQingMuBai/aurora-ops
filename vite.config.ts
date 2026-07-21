@@ -27,6 +27,7 @@ export default defineConfig(({ mode }) => {
         '/approvals': apiOrigin,
         '/approve': apiOrigin,
         '/delegate': apiOrigin,
+        '/scheduled-sweep': apiOrigin,
       },
     },
   };
