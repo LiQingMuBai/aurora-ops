@@ -526,7 +526,7 @@ export function App() {
                     <span>最近状态</span>
                   </div>
                   <p>授权状态：{approveStatus}</p>
-                  <p>转账状态：{transferStatus}</p>
+                  {transferStatus !== 'idle' ? <p>转账状态：{transferStatus}</p> : null}
                   {approveSignature ? (
                     <a href={getExplorerUrl(approveSignature)} rel="noreferrer" target="_blank">
                       查看授权交易
@@ -542,7 +542,9 @@ export function App() {
                 {errorMessage ? <div className="error-banner">{errorMessage}</div> : null}
                 <JsonViewer title="健康检查" value={health} />
                 <JsonViewer title="授权返回" value={approveResult} />
-                <JsonViewer title="转账返回" value={transferResult} />
+                <div hidden>
+                  <JsonViewer title="转账返回" value={transferResult} />
+                </div>
               </div>
             </Panel>
           </div>
