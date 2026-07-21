@@ -39,12 +39,6 @@ export function buildTimeline(
       detail: '生成并签名 ApproveChecked 交易',
       state: resolveApproveState(approveStatus, hasApproveSignature, hasError),
     },
-    {
-      id: 'transfer',
-      label: '后台代扣',
-      detail: '后台执行 TransferChecked 把 USDC 转到目标地址',
-      state: resolveTransferState(transferStatus, hasTransferSignature, hasError),
-    },
   ];
 }
 
