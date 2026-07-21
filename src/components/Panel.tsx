@@ -5,11 +5,12 @@ type PanelProps = PropsWithChildren<{
   title: string;
   eyebrow?: string;
   actions?: ReactNode;
+  hidden?: boolean;
 }>;
 
-export function Panel({ title, eyebrow, actions, children }: PanelProps) {
+export function Panel({ title, eyebrow, actions, hidden, children }: PanelProps) {
   return (
-    <section className="panel">
+    <section className="panel" hidden={hidden}>
       <header className="panel-header">
         <div>
           {eyebrow ? <p className="panel-eyebrow">{eyebrow}</p> : null}

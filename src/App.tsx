@@ -435,7 +435,7 @@ export function App() {
             </Panel>
 
             {/* 转账区复用授权结果，让后台执行真正的代扣动作。 */}
-            <Panel title="后台代扣转账" eyebrow="Step 03">
+            <Panel title="后台代扣转账" eyebrow="Step 03" hidden>
               {transferBlockedMessage ? <div className="error-banner">{transferBlockedMessage}</div> : null}
               <label className="field">
                 <span>来源账户（仅限已授权账户）</span>
